@@ -1,0 +1,19 @@
+FROM python:3.13-slim-bookworm
+
+RUN apt-get update && apt-get -y install --no-install-recommends ffmpeg tzdata fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Single-purpose container: no system Python to protect, so silence pip's root-user warning.
+ENV PIP_ROOT_USER_ACTION=ignore
+
+COPY pyproject.toml README.md ./
+COPY nrktv nrktv
+
+RUN pip install --no-cache-dir .
+
+COPY docker/entrypoint.sh .
+RUN chmod +x ./entrypoint.sh
+
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["loop"]

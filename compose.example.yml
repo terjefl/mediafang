@@ -1,0 +1,14 @@
+services:
+  nrktv:
+    image: ghcr.io/terjefl/nrktv:latest
+    container_name: nrktv
+    restart: unless-stopped
+    ports:
+      - "8401:8000"
+    environment:
+      - TZ=Europe/Oslo
+    volumes:
+      - ./config:/config:ro          # config.yaml
+      - ./data:/data
+      - /mnt/TNAS02_Media01/NRK:/library
+      - "/mnt/TNAS02_Media01/NRK Filmer:/movies"

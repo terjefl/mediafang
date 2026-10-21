@@ -1,0 +1,21 @@
+[project]
+name = "nrktv"
+version = "0.1.0"
+description = "Follow series and films on NRK TV and keep them in Plex and Jellyfin libraries, with NFO metadata and artwork"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "yt-dlp[default]",
+    "pyyaml>=6",
+    "pillow>=12.3.0",
+]
+
+[project.scripts]
+nrktv = "nrktv.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

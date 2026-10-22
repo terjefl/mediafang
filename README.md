@@ -39,6 +39,27 @@ It replaces Pinchflat for YouTube (and took over its library), and was nrktv bef
 - Cookies (`cookies_file`) only for sources that ask for them; an optional bgutil PO-token
   provider via `pot_provider_url`. Deno is in the image for YouTube's JavaScript challenges.
 
+## One-off downloads (what MeTube did)
+
+Paste a link to a single video (YouTube or anything yt-dlp knows) in «Hent én video» on the
+page, or in the search field, and choose **Video** or **Bare lyd**. Videos go to
+`<youtube_dir>/Enkeltvideoer/<channel>/<YYYY-MM-DD> <title>/`, audio to `<youtube_dir>/Lyd/Enkelt/`
+(with its own podcast feed). A playlist link adds its videos (at most 100). One-off downloads go
+first in the queue.
+
+### API and the iOS shortcut
+
+`POST /api/hent` with JSON `{"url": "...", "type": "video" | "audio"}` queues a link and answers
+`{"ok": true, "message": "Lastes ned: <title>"}`. On media.flagan.net, `/api/*` is its own
+Cloudflare Access app that only lets through the service token «mediafang iOS-snarvei», so the
+call needs the headers `CF-Access-Client-Id` and `CF-Access-Client-Secret`.
+
+`tools/make_shortcut.py` builds the shortcut «Send til Mediafang» with that token: in the share
+sheet it asks Video or Bare lyd, sends the link and shows the answer as a notification (run on
+its own, it asks for a link). Sign it with `shortcuts sign --mode anyone` and AirDrop it to the
+phone. The file holds the token, so it is kept out of git (`ios/`, `*.shortcut`); to revoke it,
+delete or rotate the service token in Cloudflare Zero Trust and build a new shortcut.
+
 ## Plex and Jellyfin
 
 Libraries are found by their folders: after a download the changed folder is scanned in whichever

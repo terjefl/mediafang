@@ -6,3 +6,5 @@ config.yaml
 data/
 *.db
 .claude/
+*.shortcut
+ios/

@@ -1,7 +1,7 @@
 [project]
-name = "nrktv"
+name = "mediafang"
 version = "0.1.0"
-description = "Follow series and films on NRK TV and keep them in Plex and Jellyfin libraries, with NFO metadata and artwork"
+description = "NRK TV and YouTube into Plex and Jellyfin libraries: follow series, channels and films on one page, with NFO metadata and artwork"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-nrktv = "nrktv.__main__:main"
+mediafang = "mediafang.__main__:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

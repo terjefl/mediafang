@@ -1,14 +1,14 @@
 services:
-  nrktv:
-    image: ghcr.io/terjefl/nrktv:latest
-    container_name: nrktv
+  mediafang:
+    image: ghcr.io/terjefl/mediafang:latest
+    container_name: mediafang
     restart: unless-stopped
     ports:
       - "8401:8000"
     environment:
       - TZ=Europe/Oslo
     volumes:
-      - ./config:/config:ro          # config.yaml
+      - ./config:/config:ro                    # config.yaml, cookies.txt
       - ./data:/data
-      - /mnt/TNAS02_Media01/NRK:/library
-      - "/mnt/TNAS02_Media01/NRK Filmer:/movies"
+      - /mnt/TNAS02_Media01:/media             # the whole share: moves are renames
+      - /path/to/pinchflat/config/db:/pinchflat:ro   # only for migrate-pinchflat

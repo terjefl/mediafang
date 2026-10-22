@@ -1,22 +1,32 @@
-# Paths as the container sees them
-library_dir: /library          # series; Plex/Jellyfin: /Media01/NRK
-movies_dir: /movies            # films and single programs; Plex/Jellyfin: "/Media01/NRK Filmer"
-data_dir: /data                # nrktv.db and temporary files
+# Paths as the container sees them. Mount the whole media share once (here /media), so moves
+# between folders are renames, and say where Plex and Jellyfin see it (server_root).
+media_root: /media
+server_root: /Media01
+library_dir: /media/NRK              # NRK series
+movies_dir: /media/NRK Filmer        # NRK films and single programs
+youtube_dir: /media/YouTube          # YouTube: <library>/<channel>/...
+data_dir: /data                      # mediafang.db and temporary files
 
 interval_minutes: 60
-rate_limit: 10M                # max download speed, yt-dlp syntax; remove for no limit
-pause_seconds: [5, 30]         # random pause between downloads
-max_downloads_per_run: 0       # 0 = no limit
+rate_limit: 10M                      # max download speed, yt-dlp syntax; remove for no limit
+pause_seconds: [5, 30]               # random pause between NRK downloads
+youtube_pause_seconds: [10, 30]      # ...and between YouTube downloads
+max_downloads_per_run: 0             # 0 = no limit
 web_port: 8000
-heartbeat_url:                 # Uptime Kuma push URL (optional)
+heartbeat_url:                       # Uptime Kuma push URL (optional)
+
+cookies_file: /config/cookies.txt    # YouTube cookies, for sources that use them (optional)
+pot_provider_url:                    # e.g. http://bgutil:4416 (optional)
+
+# Taking over Pinchflat (mediafang migrate-pinchflat)
+pinchflat_db: /pinchflat/pinchflat.db
+pinchflat_libraries:                 # library folder per Pinchflat source; default TV / Video
+  "Mandy Cane Lane - YouTube": Mandy
 
 plex:
   url: http://10.11.12.16:32400
   token: ""
-  tv_section:                  # library section id of "NRK"
-  movie_section:               # library section id of "NRK Filmer"
 
 jellyfin:
   url: http://10.11.12.16:8096
   api_key: ""
-  libraries: [NRK, NRK Filmer]

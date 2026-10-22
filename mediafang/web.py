@@ -20,6 +20,7 @@ from .config import Config
 from .db import DB, MAX_ATTEMPTS, Item, Source
 from .harvest import Progress
 from .library import DEFAULT_LIBRARY, LAYOUTS
+from .providers import adhoc
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +109,12 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
 """
 
 
+FETCH_FORM = """<form method="post" action="/hent" class="queue" style="flex-direction:row;flex-wrap:wrap;align-items:center">
+<strong>Hent én video</strong><input type="text" name="url" placeholder="Lim inn en lenke (YouTube, Vimeo, NRK …)"
+ style="flex:1 1 260px" required><button class="primary" name="type" value="video">Video</button>
+<button name="type" value="audio">Bare lyd</button></form>"""
+
+
 def _e(text) -> str:
     return html.escape(str(text if text is not None else ""))
 
@@ -147,7 +154,7 @@ def code(source: Source, item: Item) -> str:
 
 
 def kind_label(source: Source) -> str:
-    if source.provider == "youtube":
+    if source.provider in ("youtube", "adhoc"):
         return LAYOUTS.get(source.layout, source.layout)
     if source.kind == "program":
         return "Film"
@@ -157,6 +164,9 @@ def kind_label(source: Source) -> str:
 def mode_text(source: Source) -> str:
     if source.kind == "program":
         return "Enkeltprogram"
+    if source.provider == "adhoc":
+        where = f"{source.library}/{source.folder}" if source.folder else f"{source.library}/<kanal>"
+        return f"Det du henter selv · {where}"
     text = MODES.get(source.mode, source.mode)
     if source.mode == "seasons":
         text += ": " + ", ".join(source.seasons)
@@ -183,8 +193,9 @@ class App:
         body += self._queue()
         chips = "".join(
             f'<a class="chip{" on" if provider == p else ""}" href="/{"?p=" + p if p else ""}">{label}</a>'
-            for p, label in (("", "Alle"), ("nrk", "NRK"), ("youtube", "YouTube"))
+            for p, label in (("", "Alle"), ("nrk", "NRK"), ("youtube", "YouTube"), ("adhoc", "Enkelt"))
         )
+        body += FETCH_FORM
         body += f"""<div class="row"><h2>Det du følger</h2><div class="chips">{chips}</div>
 <form method="post" action="/kjor"><button>Sjekk nå</button></form></div>"""
         if not sources:
@@ -208,13 +219,17 @@ class App:
             if not s.enabled:
                 chips.append('<span class="chip warn">pauset</span>')
             toggle = "Fortsett" if not s.enabled else "Pause"
+            edit = unfollow = ""
+            if s.provider != "adhoc":  # the one-off sources are fixed
+                edit = f'<a class="btn" href="{self._edit_link(s)}">Endre</a>'
+                unfollow = f"""<form method="post" action="/slett" onsubmit="return confirm('Slutte å følge {_e(s.folder_name)}? Filene blir liggende.')">
+<input type="hidden" name="id" value="{s.id}"><button class="danger">Slutt å følge</button></form>"""
             cards.append(f"""<div class="card"><a href="/kilde/{s.id}"><img src="{_e(s.image or s.poster or '')}" alt="" loading="lazy"></a>
 <div class="body"><h3><a href="/kilde/{s.id}">{_e(s.folder_name)}</a></h3>
 <div class="muted">{_e(mode_text(s))}</div><div class="chips">{"".join(chips)}</div>
-<div class="actions"><a class="btn" href="{self._edit_link(s)}">Endre</a>
+<div class="actions">{edit}
 <form method="post" action="/pause"><input type="hidden" name="id" value="{s.id}"><button>{toggle}</button></form>
-<form method="post" action="/slett" onsubmit="return confirm('Slutte å følge {_e(s.folder_name)}? Filene blir liggende.')">
-<input type="hidden" name="id" value="{s.id}"><button class="danger">Slutt å følge</button></form></div></div></div>""")
+{unfollow}</div></div></div>""")
         body += f'<div class="grid">{"".join(cards)}</div>'
         return page("Følger", body)
 
@@ -240,8 +255,28 @@ class App:
     def _edit_link(self, s: Source) -> str:
         return f"/folg?provider={s.provider}&kind={s.kind}&ref={urllib.parse.quote(s.ref)}"
 
+    def fetch_page(self, url: str) -> bytes:
+        """A link nothing can follow (a single video): offer to download it."""
+        body = f"""<div class="panel"><h2 style="margin:0">Hent denne</h2><div class="muted">{_e(url)}</div>
+<form method="post" action="/hent" class="row" style="justify-content:flex-start">
+<input type="hidden" name="url" value="{_e(url)}">
+<button class="primary" name="type" value="video">Video</button><button name="type" value="audio">Bare lyd</button></form>
+<div class="muted">Video havner i biblioteket «Enkeltvideoer», lyd i «Enkeltlyd» med egen podkast-feed.</div></div>"""
+        return page("Hent", body, url)
+
+    def fetch(self, url: str, audio: bool) -> str:
+        """Queue a one-off download and start the loop. Returns a message for the user."""
+        url = url.strip()
+        if not re.match(r"https?://", url):
+            raise ValueError("Ikke en lenke")
+        result = adhoc.add(self.db, url, audio=audio)
+        self.wake.set()
+        return result.message
+
     def search(self, q: str, youtube: bool = False) -> bytes:
         q = q.strip()
+        if re.match(r"https?://", q):
+            return self.fetch_page(q)
         if not q:
             return page("Søk", '<div class="empty">Skriv noe å søke etter.</div>')
         try:
@@ -407,8 +442,8 @@ class App:
         body = f"""<div class="panel"><div class="hero"><img src="{_e(source.image or source.poster or '')}" alt="">
 <div class="text"><h2 style="margin-top:0">{_e(source.folder_name)}</h2><div class="muted">{_e(source.plot[:600])}</div>
 <p class="muted">{_e(kind_label(source))} · {_e(mode_text(source))}</p>{feed}
-<a class="btn" href="{self._edit_link(source)}">Endre</a>
-<a class="btn" href="{_e(provider.page_url(source))}">Se hos {providers.NAMES[source.provider]}</a>
+{"" if source.provider == "adhoc" else f'<a class="btn" href="{self._edit_link(source)}">Endre</a>'}
+{"" if source.provider == "adhoc" else f'<a class="btn" href="{_e(provider.page_url(source))}">Se hos {providers.NAMES[source.provider]}</a>'}
 </div></div></div><h2>Innhold</h2>{table}"""
         return page(source.folder_name, body)
 
@@ -523,7 +558,7 @@ def make_handler(app: App):
                 if url.path.startswith("/feed/"):
                     return self._feed(url.path, head)
                 if url.path == "/":
-                    flash = "Lagret. Sjekker nå, nye ting lastes ned i bakgrunnen." if one("ok") else ""
+                    flash = "Lagret. Sjekker nå, nye ting lastes ned i bakgrunnen." if one("ok") else one("msg")
                     return self._send(200, app.index(flash, one("p") if one("p") in providers.PROVIDERS else ""))
                 if url.path == "/health":
                     return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
@@ -593,12 +628,36 @@ def make_handler(app: App):
                     self.wfile.write(chunk)
                     left -= len(chunk)
 
+        def _api_fetch(self, url: str, kind: str) -> None:
+            """For the iOS shortcut (and anything else): {"url": ..., "type": "video" | "audio"}."""
+            try:
+                msg = app.fetch(url, audio=kind.lower() in ("audio", "lyd", "bare lyd"))
+                status, body = 200, {"ok": True, "message": msg}
+            except Exception as e:
+                status, body = 400, {"ok": False, "message": f"Kunne ikke hente: {e}"}
+            self._send(status, json.dumps(body, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+
         def do_POST(self):
             length = int(self.headers.get("Content-Length") or 0)
-            form = urllib.parse.parse_qs(self.rfile.read(length).decode())
+            raw = self.rfile.read(length).decode()
+            if "json" in (self.headers.get("Content-Type") or ""):
+                try:
+                    form = {k: [str(v)] for k, v in json.loads(raw or "{}").items()}
+                except ValueError:
+                    form = {}
+            else:
+                form = urllib.parse.parse_qs(raw)
             one = lambda key: form.get(key, [""])[0]
             path = urllib.parse.urlparse(self.path).path
             try:
+                if path == "/api/hent":
+                    return self._api_fetch(one("url"), one("type"))
+                if path == "/hent":
+                    try:
+                        msg = app.fetch(one("url"), audio=one("type") == "audio")
+                    except Exception as e:
+                        msg = f"Kunne ikke hente: {e}"
+                    return self._redirect("/?msg=" + urllib.parse.quote(msg))
                 if path == "/folg":
                     return self._redirect(app.save_follow(form))
                 if path == "/kjor":

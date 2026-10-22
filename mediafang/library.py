@@ -41,9 +41,11 @@ def season_dir(season: int) -> str:
 
 def source_root(cfg: Config, source: Source) -> Path:
     """The source's own folder: a show's folder, a channel's folder, or (NRK films) movies_dir."""
-    if source.provider == "youtube":
+    if source.provider in ("youtube", "adhoc"):
         base = cfg.youtube_dir or cfg.library_dir.parent / "YouTube"
         library = source.library or DEFAULT_LIBRARY.get(source.layout, "Video")
+        if source.provider == "adhoc":  # one-off downloads: a channel folder per item, see _youtube_target
+            return base / safe_filename(library) / safe_filename(source.folder) if source.folder else base / safe_filename(library)
         return base / safe_filename(library) / safe_filename(source.folder_name)
     if source.kind == "program":
         return cfg.movies_dir
@@ -51,7 +53,7 @@ def source_root(cfg: Config, source: Source) -> Path:
 
 
 def target(cfg: Config, source: Source, item: Item) -> Target:
-    if source.provider == "youtube":
+    if source.provider in ("youtube", "adhoc"):
         return _youtube_target(cfg, source, item)
     if source.kind == "program":
         year = item.year or (item.aired.year if item.aired else None)
@@ -79,6 +81,8 @@ def _youtube_target(cfg: Config, source: Source, item: Item) -> Target:
         return Target(root, root / season_dir(item.season), f"s{item.season}e{item.episode:06d} - {title} [{item.item_id}]")
     if source.layout == "audio":
         return Target(root, root, f"{day} {title} [{item.item_id}]")
+    if source.provider == "adhoc":  # one-off videos: grouped by who published them
+        root = root / safe_filename(item.channel or "Diverse", 100)
     return Target(root, root / safe_filename(f"{day} {title}", 180), f"{title} [{item.item_id}]")
 
 

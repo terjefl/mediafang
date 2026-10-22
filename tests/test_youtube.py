@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import time
 import xml.etree.ElementTree as ET
@@ -304,3 +305,70 @@ def test_listing_stops_past_the_oldest_date_wanted(db, cfg, monkeypatch):
     found = youtube.list_flat(cfg, s, set())
     assert [e.video_id for e in found] == ["n0000000000", "n0000000001", "n0000000002"]
     assert len(seen) < 10  # did not page through the old ones
+
+
+# ---- one-off downloads ---------------------------------------------------------
+
+
+def test_adhoc_add_and_layout(db, cfg, monkeypatch):
+    from mediafang.providers import adhoc
+
+    info = {"id": "DkvzBZpdcU4", "extractor_key": "Youtube", "title": "Purified Radio 530", "upload_date": "20261019",
+            "channel": "Nora En Pure", "webpage_url": "https://www.youtube.com/watch?v=DkvzBZpdcU4", "duration": 3550}
+
+    class FakeYdl:
+        def __init__(self, *a, **k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def extract_info(self, url, **k):
+            return info
+
+    monkeypatch.setattr(adhoc, "YoutubeDL", FakeYdl)
+    added = adhoc.add(db, "https://youtu.be/DkvzBZpdcU4")
+    assert added.message == "Lastes ned: Purified Radio 530"
+    item = added.items[0]
+    assert item.item_id == "youtube-DkvzBZpdcU4" and item.channel == "Nora En Pure"
+    source = db.source(item.source_id)
+    t = target(cfg, source, db.item("adhoc", item.item_id))
+    assert t.folder == cfg.youtube_dir / "Enkeltvideoer/Nora En Pure/2026-10-19 Purified Radio 530"
+    assert t.basename == "Purified Radio 530 [youtube-DkvzBZpdcU4]"
+    # the same link again is not queued twice; as audio it goes to its own source and folder
+    assert adhoc.add(db, "https://youtu.be/DkvzBZpdcU4").known
+    audio = adhoc.add(db, "https://youtu.be/DkvzBZpdcU4", audio=True).items[0]
+    a_source = db.source(audio.source_id)
+    assert a_source.layout == "audio" and a_source.feed_token
+    assert target(cfg, a_source, audio).folder == cfg.youtube_dir / "Lyd/Enkelt"
+    # one-off downloads go first in the queue
+    db.save_source("youtube", "channel", "UCx", "Other")
+    other = db.source_by_ref("youtube", "UCx")
+    db.add_item(Item("youtube", "zzzzzzzzzzz", other.id, 2020, 1, "Old", aired=date(2020, 1, 1)))
+    assert db.due()[0].provider == "adhoc"
+
+
+def test_api_fetch(db, cfg, monkeypatch):
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from mediafang.web import App, make_handler
+
+    app = App(cfg, db)
+    monkeypatch.setattr(app, "fetch", lambda url, audio: f"Lastes ned: {url} {'lyd' if audio else 'video'}")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_port}/api/hent", method="POST",
+            data=json.dumps({"url": "https://youtu.be/x", "type": "Bare lyd"}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        body = json.loads(urllib.request.urlopen(req).read())
+        assert body == {"ok": True, "message": "Lastes ned: https://youtu.be/x lyd"}
+    finally:
+        server.shutdown()

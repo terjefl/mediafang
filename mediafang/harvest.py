@@ -27,7 +27,7 @@ from .library import (
     write_show_nfo,
 )
 from .poster import make_poster
-from .providers import youtube
+from .providers import adhoc, youtube
 
 log = logging.getLogger(__name__)
 
@@ -127,6 +127,8 @@ class Harvester:
             decision = youtube.prepare(source, item, info)
             if decision.action != "ok":
                 return decision.action, decision
+        elif source.provider == "adhoc":
+            adhoc.prepare(item, info)
 
         t = target(self.cfg, source, item)
         t.folder.mkdir(parents=True, exist_ok=True)
@@ -273,7 +275,7 @@ class Harvester:
         for item in due:
             if stop and stop():
                 break
-            if item.provider == "youtube" and youtube_throttled:
+            if item.provider in ("youtube", "adhoc") and youtube_throttled:
                 continue
             if last_provider:
                 self._pause(item.provider)
@@ -334,9 +336,10 @@ class Harvester:
         with self.db.conn() as c:
             c.execute(
                 "UPDATE items SET title = ?, plot = ?, aired = ?, season = ?, episode = ?, duration = ?, "
-                "is_short = ?, is_live = ? WHERE provider = ? AND item_id = ?",
+                "is_short = ?, is_live = ?, channel = ?, image = ? WHERE provider = ? AND item_id = ?",
                 (item.title, item.plot, item.aired.isoformat() if item.aired else None, item.season, item.episode,
-                 item.duration, int(item.is_short), int(item.is_live), item.provider, item.item_id),
+                 item.duration, int(item.is_short), int(item.is_live), item.channel, item.image,
+                 item.provider, item.item_id),
             )
 
     def _pause(self, provider: str) -> None:
@@ -362,7 +365,7 @@ def _size(path: Path) -> int:
 
 def _failure_status(item: Item, e: Exception) -> str:
     message = str(e)
-    if item.provider == "youtube":
+    if item.provider in ("youtube", "adhoc"):
         kind = youtube.classify(message)
         return {"login": "unavailable"}.get(kind, kind)
     if any(s in message for s in _NOT_YET):

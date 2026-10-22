@@ -13,7 +13,7 @@
 from dataclasses import dataclass, field
 from datetime import date
 
-NAMES = {"nrk": "NRK", "youtube": "YouTube"}
+NAMES = {"nrk": "NRK", "youtube": "YouTube", "adhoc": "Enkelt"}
 
 
 @dataclass
@@ -70,6 +70,6 @@ def date_episode(day: date, index: int = 1) -> int:
 
 
 # Last: the provider modules use the classes above
-from . import nrk, youtube
+from . import adhoc, nrk, youtube
 
-PROVIDERS = {"nrk": nrk, "youtube": youtube}
+PROVIDERS = {"nrk": nrk, "youtube": youtube, "adhoc": adhoc}

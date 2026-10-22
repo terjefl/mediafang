@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, fields
 from datetime import date, datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sources (
@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS items (
     retry_after REAL NOT NULL DEFAULT 0,
     files TEXT NOT NULL DEFAULT '[]',
     size INTEGER NOT NULL DEFAULT 0,
+    url TEXT,                        -- one-off downloads: the page it came from
+    channel TEXT,                    -- one-off downloads: who published it (folder name)
     updated REAL NOT NULL,
     PRIMARY KEY (provider, item_id)
 );
@@ -165,6 +167,8 @@ class Item:
     year: int | None = None
     original_title: str | None = None
     duration: int | None = None
+    url: str | None = None
+    channel: str | None = None
     is_short: bool = False
     is_live: bool = False
     status: str = "pending"
@@ -217,6 +221,11 @@ class DB:
             if c.execute("SELECT 1 FROM sqlite_master WHERE name = 'follows'").fetchone():
                 _migrate_v1(c)
             c.executescript(SCHEMA)
+            # v3: url and channel on items
+            have = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+            for column in ("url", "channel"):
+                if column not in have:
+                    c.execute(f"ALTER TABLE items ADD COLUMN {column} TEXT")
             c.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     @contextmanager
@@ -377,15 +386,16 @@ class DB:
         return _item(r) if r else None
 
     def due(self) -> list[Item]:
-        """Items to download now: NRK first, those whose rights end first first, then the rest
-        oldest first."""
+        """Items to download now: one-off downloads first (someone is waiting for them), then NRK,
+        those whose rights end first first, then the rest oldest first."""
         now = time.time()
         with self.conn() as c:
             rows = c.execute(
                 """SELECT i.* FROM items i JOIN sources s ON s.id = i.source_id
                    WHERE s.enabled = 1 AND ((i.status = 'pending' AND i.retry_after <= ?)
                        OR (i.status = 'failed' AND i.attempts < ? AND i.retry_after <= ?))
-                   ORDER BY i.expires IS NULL, i.expires, i.provider = 'youtube', i.aired, i.season, i.episode""",
+                   ORDER BY i.provider != 'adhoc', i.expires IS NULL, i.expires, i.provider = 'youtube', i.aired,
+                       i.season, i.episode""",
                 (now, MAX_ATTEMPTS, now),
             )
             return [_item(r) for r in rows]

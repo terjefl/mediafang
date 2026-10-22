@@ -174,11 +174,8 @@ def _library_moves(cfg: Config, p: Plan) -> list[tuple[str, str]]:
 
 def migrate(cfg: Config, db: DB, apply: bool = False, finish: bool = False) -> bool:
     plans = plan(cfg, db)
-    if not finish:
-        done = [p for p in plans if (s := db.source_by_ref("youtube", p.ref)) and db.items(s.id)]
-        for p in done:
-            print(f"{p.title}: already taken over")
-        plans = [p for p in plans if p not in done]
+    # Each step can be run again: what is imported or moved already is left alone
+    imported = {p.ref for p in plans if (s := db.source_by_ref("youtube", p.ref)) and db.items(s.id)}
     ok = True
     for p in plans:
         counts: dict[str, int] = {}
@@ -189,8 +186,12 @@ def migrate(cfg: Config, db: DB, apply: bool = False, finish: bool = False) -> b
         print(f"  items: {counts}")
         for m in p.missing[:5]:
             print(f"  missing: {m}")
+        if p.ref in imported:
+            print("  imported already")
         if p.old_root is None:
             print("  (no files)")
+        elif p.new_root.exists() and not p.old_root.exists():
+            print("  moved already")
         elif p.new_root.exists() and not finish:
             print("  ! target folder exists already")
             ok = False
@@ -206,6 +207,8 @@ def migrate(cfg: Config, db: DB, apply: bool = False, finish: bool = False) -> b
         return False
 
     for p in plans:
+        if p.ref in imported:
+            continue
         source = db.save_source("youtube", p.kind, p.ref, p.title, **p.settings)
         for item in p.items:
             item.source_id = source.id
@@ -213,7 +216,7 @@ def migrate(cfg: Config, db: DB, apply: bool = False, finish: bool = False) -> b
         db.touch(source.id, full_index=True)
         print(f"{p.title}: {len(p.items)} items imported")
 
-    _add_library_folders(cfg, plans)
+    _add_plex_folders(cfg, plans)
     for p in plans:
         if p.old_root is None or not p.old_root.exists():
             continue
@@ -224,12 +227,14 @@ def migrate(cfg: Config, db: DB, apply: bool = False, finish: bool = False) -> b
             continue
         os.rename(p.old_root, p.new_root)
         print(f"{p.title}: moved to {p.new_root}")
+    # Jellyfin only takes folders that exist, so its new folders come right after the move
+    _add_jellyfin_folders(cfg, plans)
     servers.refresh(cfg, [p.new_root for p in plans])
     print("\nWhen Plex and Jellyfin have scanned, check the libraries and run with --finish.")
     return ok
 
 
-def _add_library_folders(cfg: Config, plans: list[Plan]) -> None:
+def _add_plex_folders(cfg: Config, plans: list[Plan]) -> None:
     moves = [m for p in plans if p.old_root for m in _library_moves(cfg, p)]
     if cfg.plex:
         for section in servers.plex_sections(cfg):
@@ -238,6 +243,10 @@ def _add_library_folders(cfg: Config, plans: list[Plan]) -> None:
             if added:
                 set_plex_locations(cfg, section, locations + added)
                 print(f"Plex «{section['title']}»: + {', '.join(added)}")
+
+
+def _add_jellyfin_folders(cfg: Config, plans: list[Plan]) -> None:
+    moves = [m for p in plans if p.old_root for m in _library_moves(cfg, p)]
     if cfg.jellyfin:
         for folder in servers.jellyfin_call(cfg, "/Library/VirtualFolders") or []:
             for old, new in moves:

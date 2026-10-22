@@ -31,6 +31,9 @@ log = logging.getLogger(__name__)
 # yt-dlp's NRK messages for rights that are gone for good; "not ready" is worth another try
 _EXPIRED = ("har gått ut", "Ikke tilgjengelig", "ProgramRightsHasExpired", "NoProgramRights")
 _GEO = ("utenfor Norge", "IsGeoBlocked")
+# ...and for something not out yet ("NRK said: Kommer i dag kl. 21:11", or still on air)
+_NOT_YET = ("NRK said: Kommer", "ProgramRightsAreNotReady", "ikke se eller høre programmet")
+NOT_YET_WAIT = 30 * 60
 VIDEO_SUFFIXES = (".mp4", ".mkv", ".m4v", ".webm")
 
 
@@ -276,6 +279,10 @@ class Harvester:
                 files = self.download(ep)
             except Exception as e:
                 status = _failure_status(e)
+                if status == "waiting":
+                    self.db.postpone(ep.prf_id, time.time() + NOT_YET_WAIT)
+                    log.info("%s isn't out at NRK yet, trying again in %d minutes", label, NOT_YET_WAIT // 60)
+                    continue
                 self.db.set_status(ep.prf_id, status, error=str(e))
                 if status == "failed":
                     result.failed.append(label)
@@ -314,6 +321,8 @@ def _sidecars(t: Target) -> list[Path]:
 
 def _failure_status(e: Exception) -> str:
     message = str(e)
+    if any(s in message for s in _NOT_YET):
+        return "waiting"
     if isinstance(e, GeoRestrictedError) or any(s in message for s in _GEO):
         return "geo"
     if isinstance(e, DownloadError) and any(s in message for s in _EXPIRED):

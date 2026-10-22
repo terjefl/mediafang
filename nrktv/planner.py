@@ -7,7 +7,7 @@ that day E102202. The number follows from the date alone, whatever order episode
 """
 
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from .db import EpisodeRow, Follow
 from .psapi import Instalment, SeasonRef, Series
@@ -61,6 +61,8 @@ def wanted(follow: Follow, inst: Instalment) -> bool:
     """Whether an episode NRK lists should be downloaded."""
     if not inst.available:
         return False  # not out yet, or gone
+    if inst.rights_from and inst.rights_from > datetime.now(inst.rights_from.tzinfo):
+        return False  # tonight's broadcast: listed before it can be watched; a later run takes it
     if follow.mode == "new":
         released = inst.released.timestamp() if inst.released else None
         if released is None or released < follow.since.timestamp():

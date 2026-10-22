@@ -7,6 +7,7 @@ import html
 import json
 import logging
 import threading
+import time
 import urllib.parse
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -255,6 +256,8 @@ class App:
         rows = []
         for ep in eps:
             status = STATUS.get(ep.status, ep.status)
+            if ep.status == "pending" and ep.retry_after > time.time():
+                status = "Ikke lagt ut ennå"
             if ep.status == "failed" and ep.attempts >= MAX_ATTEMPTS:
                 status += " (gitt opp)"
             retry = ""

@@ -293,10 +293,10 @@ class DB:
         with self.conn() as c:
             rows = c.execute(
                 """SELECT e.* FROM episodes e JOIN follows f ON f.id = e.follow_id
-                   WHERE f.enabled = 1 AND (e.status = 'pending'
+                   WHERE f.enabled = 1 AND ((e.status = 'pending' AND e.retry_after <= ?)
                        OR (e.status = 'failed' AND e.attempts < ? AND e.retry_after <= ?))
                    ORDER BY e.expires IS NULL, e.expires, e.aired, e.season, e.episode""",
-                (MAX_ATTEMPTS, time.time()),
+                (time.time(), MAX_ATTEMPTS, time.time()),
             )
             return [_episode(r) for r in rows]
 
@@ -316,6 +316,14 @@ class DB:
                     + " WHERE prf_id = ?",
                     (status, error, time.time(), *([json.dumps(files)] if files is not None else []), prf_id),
                 )
+
+    def postpone(self, prf_id: str, until: float) -> None:
+        """Not out at NRK yet: try again later, without an error or a used-up attempt."""
+        with self.conn() as c:
+            c.execute(
+                "UPDATE episodes SET status = 'pending', error = NULL, retry_after = ?, updated = ? WHERE prf_id = ?",
+                (until, time.time(), prf_id),
+            )
 
     def retry(self, prf_id: str) -> None:
         with self.conn() as c:

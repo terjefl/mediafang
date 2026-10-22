@@ -65,6 +65,8 @@ class Instalment:
     image: str | None
     year: int | None = None
     original_title: str | None = None
+    # When it can be watched on demand; NRK lists tonight's broadcast as "available" before that
+    rights_from: datetime | None = None
 
 
 @dataclass
@@ -175,6 +177,7 @@ def program(prf_id: str) -> Program:
         image=best_image(info.get("image")),
         year=more.get("productionYear"),
         original_title=more.get("originalTitle"),
+        rights_from=_datetime((rights.get("from") or {}).get("date")),
         poster=best_image(data.get("posterImage")),
         backdrop=best_image(data.get("backdropImage")),
     )
@@ -200,6 +203,7 @@ def _instalment(e: dict) -> Instalment:
         image=best_image(e.get("image")),
         year=e.get("productionYear"),
         original_title=e.get("originalTitle"),
+        rights_from=_datetime((rights.get("from") or {}).get("date")),
     )
 
 

@@ -1,6 +1,7 @@
 import json
+import time
 import xml.etree.ElementTree as ET
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -243,3 +244,23 @@ def test_follow_mode_new_since(fake_api, db):
     # changing the mode keeps the original start
     again = db.save_follow("series", "dagsrevyen", "Dagsrevyen", mode="all")
     assert again.since == follow.since and again.mode == "all"
+
+
+def test_not_out_yet_waits_without_error(fake_api, cfg, db):
+    from yt_dlp.utils import DownloadError
+
+    assert _failure_status(DownloadError("ERROR: [NRK] NNFA51102226: NRK said: Kommer i dag kl. 21:11")) == "waiting"
+    follow = db.save_follow("program", "KOID22008424", "K")
+    Harvester(cfg, db).scan(follow)
+    db.postpone("KOID22008424", time.time() + 1800)
+    ep = db.episode("KOID22008424")
+    assert (ep.status, ep.error, ep.attempts) == ("pending", None, 0)
+    assert db.due() == []  # not before the wait is over
+
+
+def test_broadcast_before_rights_start_is_skipped(fake_api, db):
+    s = psapi.series("lindmo")
+    follow = db.save_follow("series", "lindmo", s.title, series_type=s.series_type)
+    inst = psapi.season("lindmo", "2024")[0]
+    inst.rights_from = datetime.now().astimezone() + timedelta(hours=2)
+    assert not planner.wanted(follow, inst)

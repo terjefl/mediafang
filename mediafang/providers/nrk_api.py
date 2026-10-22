@@ -188,12 +188,18 @@ def ready_at(prf_id: str) -> datetime | None:
     on demand from a later time. NRK's catalogue calls tonight's broadcast "available" while it
     is on air, but only the player's manifest says whether there is anything to download yet."""
     try:
-        avail = get(f"/playback/manifest/program/{urllib.parse.quote(prf_id)}").get("availability") or {}
+        manifest = get(f"/playback/manifest/program/{urllib.parse.quote(prf_id)}")
     except Exception:
         return None  # let the download say what is wrong
+    avail = manifest.get("availability") or {}
     now = datetime.now().astimezone()
     on_demand = avail.get("onDemand") or {}
     if on_demand.get("hasRightsNow"):
+        # Right after a broadcast NRK plays it back from the live stream ("nrk-live-...") until
+        # the recording is published; yt-dlp finds no formats in that
+        urls = [a.get("url", "") for a in (manifest.get("playable") or {}).get("assets") or []]
+        if urls and all("-live-" in u for u in urls):
+            return now + timedelta(minutes=30)
         return None
     start = _datetime(on_demand.get("from"))
     if start and start > now:

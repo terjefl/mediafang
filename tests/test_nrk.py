@@ -279,3 +279,15 @@ def test_ready_at(monkeypatch):
     assert psapi.ready_at("READY") is None
     assert psapi.ready_at("LATER").isoformat() == soon
     assert psapi.ready_at("LIVE") > datetime.fromisoformat(soon)  # after the broadcast ends
+
+
+def test_ready_at_waits_for_the_recording(monkeypatch):
+    live = "https://nrk-live-world.akamaized.net/nrk1-x/muxed.m3u8"
+    od = "https://nrk-od-world.akamaized.net/x/master.m3u8"
+    manifests = {
+        "LIVECOPY": {"availability": {"onDemand": {"hasRightsNow": True}}, "playable": {"assets": [{"url": live}]}},
+        "RECORDING": {"availability": {"onDemand": {"hasRightsNow": True}}, "playable": {"assets": [{"url": od}]}},
+    }
+    monkeypatch.setattr(psapi, "get", lambda path: manifests[path.rsplit("/", 1)[1]])
+    assert psapi.ready_at("LIVECOPY") > datetime.now().astimezone()
+    assert psapi.ready_at("RECORDING") is None

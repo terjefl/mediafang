@@ -10,7 +10,7 @@ import re
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 BASE = "https://psapi.nrk.no"
 USER_AGENT = "nrktv/0.1 (+https://github.com/terjefl/nrktv)"
@@ -181,6 +181,29 @@ def program(prf_id: str) -> Program:
         poster=best_image(data.get("posterImage")),
         backdrop=best_image(data.get("backdropImage")),
     )
+
+
+def ready_at(prf_id: str) -> datetime | None:
+    """None if a program can be watched on demand now, else when it will be: still on air, or
+    on demand from a later time. NRK's catalogue calls tonight's broadcast "available" while it
+    is on air, but only the player's manifest says whether there is anything to download yet."""
+    try:
+        avail = get(f"/playback/manifest/program/{urllib.parse.quote(prf_id)}").get("availability") or {}
+    except Exception:
+        return None  # let the download say what is wrong
+    now = datetime.now().astimezone()
+    on_demand = avail.get("onDemand") or {}
+    if on_demand.get("hasRightsNow"):
+        return None
+    start = _datetime(on_demand.get("from"))
+    if start and start > now:
+        return start
+    live = avail.get("live") or {}
+    end = _datetime((live.get("transmissionInterval") or {}).get("to"))
+    if live.get("isOngoing") or (end and end > now):
+        # NRK publishes the recording a little after the broadcast ends
+        return max(end, now) + timedelta(minutes=15) if end else now + timedelta(minutes=30)
+    return None
 
 
 def _instalment(e: dict) -> Instalment:

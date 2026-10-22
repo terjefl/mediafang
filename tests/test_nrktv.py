@@ -264,3 +264,16 @@ def test_broadcast_before_rights_start_is_skipped(fake_api, db):
     inst = psapi.season("lindmo", "2024")[0]
     inst.rights_from = datetime.now().astimezone() + timedelta(hours=2)
     assert not planner.wanted(follow, inst)
+
+
+def test_ready_at(monkeypatch):
+    soon = (datetime.now().astimezone() + timedelta(minutes=20)).isoformat()
+    manifests = {
+        "LIVE": {"availability": {"onDemand": None, "live": {"isOngoing": True, "transmissionInterval": {"to": soon}}}},
+        "READY": {"availability": {"onDemand": {"hasRightsNow": True}, "live": None}},
+        "LATER": {"availability": {"onDemand": {"from": soon, "hasRightsNow": False}, "live": None}},
+    }
+    monkeypatch.setattr(psapi, "get", lambda path: manifests[path.rsplit("/", 1)[1]])
+    assert psapi.ready_at("READY") is None
+    assert psapi.ready_at("LATER").isoformat() == soon
+    assert psapi.ready_at("LIVE") > datetime.fromisoformat(soon)  # after the broadcast ends

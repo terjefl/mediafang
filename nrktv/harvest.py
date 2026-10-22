@@ -275,6 +275,10 @@ class Harvester:
                 self._pause()
             follow = self.db.follow(ep.follow_id)
             label = f"{follow.title} {ep.title}"
+            if (when := psapi.ready_at(ep.prf_id)) is not None:
+                self.db.postpone(ep.prf_id, max(when.timestamp(), time.time() + 5 * 60))
+                log.info("%s isn't out at NRK yet, trying again %s", label, when.strftime("%d.%m %H:%M"))
+                continue
             try:
                 files = self.download(ep)
             except Exception as e:

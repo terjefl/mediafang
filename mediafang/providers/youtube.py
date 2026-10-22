@@ -292,6 +292,14 @@ def scan(db: DB, source: Source, cfg: Config) -> int:
     """Record new videos. A full flat listing the first time and once a day, the RSS feed in
     between. Videos the settings leave out are recorded as skipped, so they aren't looked at
     again (changing the settings clears them)."""
+    if not (source.image or source.poster):
+        # e.g. taken over from Pinchflat: the channel's avatar and banner, for the page and Plex
+        try:
+            info = lookup(source.kind, source.ref)
+            db.update_meta(source.id, image=info.image, poster=info.poster, backdrop=info.backdrop,
+                           plot=source.plot or info.plot)
+        except Exception as e:  # cosmetic; never fail a scan over it
+            log.warning("%s: could not look up the channel's pictures: %s", source.title, e)
     known = db.known_ids(source.id)
     full = not known or time.time() - source.last_full_index > FULL_INDEX_SECONDS
     if full:

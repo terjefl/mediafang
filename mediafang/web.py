@@ -75,7 +75,10 @@ h2{font-size:17px;margin:22px 0 10px}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
-.card img{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--chip);display:block}
+.card img,.card .ph{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--chip);display:block}
+.ph{display:flex!important;align-items:center;justify-content:center;font-size:42px;font-weight:700;color:var(--muted);
+background:linear-gradient(135deg,var(--chip),var(--line))!important}
+.hero .ph{width:280px;max-width:100%;border-radius:10px;aspect-ratio:16/9}
 .card .body{padding:10px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
 .card h3{font-size:15px;margin:0}
 .muted{color:var(--muted);font-size:13px}
@@ -113,6 +116,16 @@ FETCH_FORM = """<form method="post" action="/hent" class="queue" style="flex-dir
 <strong>Hent én video</strong><input type="text" name="url" placeholder="Lim inn en lenke (YouTube, Vimeo, NRK …)"
  style="flex:1 1 260px" required><button class="primary" name="type" value="video">Video</button>
 <button name="type" value="audio">Bare lyd</button></form>"""
+
+
+def picture(url: str | None, title: str) -> str:
+    """The picture, or (when there is none, or it doesn't load) a plain tile with the initial."""
+    initial = _e((title or "?").strip()[:1].upper())
+    tile = f'<div class="ph">{initial}</div>'
+    if not url:
+        return tile
+    return (f'<img src="{_e(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" '
+            f"""onerror="this.replaceWith(Object.assign(document.createElement('div'),{{className:'ph',textContent:'{initial}'}}))">""")
 
 
 def _e(text) -> str:
@@ -224,7 +237,7 @@ class App:
                 edit = f'<a class="btn" href="{self._edit_link(s)}">Endre</a>'
                 unfollow = f"""<form method="post" action="/slett" onsubmit="return confirm('Slutte å følge {_e(s.folder_name)}? Filene blir liggende.')">
 <input type="hidden" name="id" value="{s.id}"><button class="danger">Slutt å følge</button></form>"""
-            cards.append(f"""<div class="card"><a href="/kilde/{s.id}"><img src="{_e(s.image or s.poster or '')}" alt="" loading="lazy"></a>
+            cards.append(f"""<div class="card"><a href="/kilde/{s.id}">{picture(s.image or s.poster, s.folder_name)}</a>
 <div class="body"><h3><a href="/kilde/{s.id}">{_e(s.folder_name)}</a></h3>
 <div class="muted">{_e(mode_text(s))}</div><div class="chips">{"".join(chips)}</div>
 <div class="actions">{edit}
@@ -297,7 +310,7 @@ class App:
                 '<span class="chip ok">Følger</span>' if (h.provider, h.ref) in followed else
                 f'<a class="btn" href="/folg?provider={h.provider}&kind={h.kind}&ref={urllib.parse.quote(h.ref)}">Følg …</a>'
             )
-            cards.append(f"""<div class="card"><img src="{_e(h.image or '')}" alt="" loading="lazy"><div class="body">
+            cards.append(f"""<div class="card">{picture(h.image, h.title)}<div class="body">
 <h3>{_e(h.title)}</h3><div class="chips"><span class="chip {h.provider}">{providers.NAMES[h.provider]}</span>
 <span class="chip">{kind}</span></div><div class="muted">{_e(h.description[:220])}</div>
 <div class="actions">{action}</div></div></div>""")
@@ -321,7 +334,7 @@ class App:
         body = f"""<form method="post" action="/folg" class="panel">
 <input type="hidden" name="provider" value="{_e(provider)}"><input type="hidden" name="kind" value="{_e(info.kind)}">
 <input type="hidden" name="ref" value="{_e(info.ref)}">
-<div class="hero"><img src="{_e(info.image or info.poster or '')}" alt=""><div class="text">
+<div class="hero">{picture(info.image or info.poster, info.title)}<div class="text">
 <h2 style="margin-top:0">{_e(info.title)}</h2><div class="muted">{_e(info.plot[:600])}</div></div></div>{options}
 <div><button class="primary">{verb}</button> <a class="btn" href="/">Avbryt</a></div></form>"""
         return page(info.title, body)
@@ -439,7 +452,7 @@ class App:
         if source.layout == "audio":
             url = f"/feed/{source.feed_token}.xml"
             feed = f'<p>Podkast-feed: <a href="{url}">{url}</a> <span class="muted">(full adresse: denne sidens adresse + stien)</span></p>'
-        body = f"""<div class="panel"><div class="hero"><img src="{_e(source.image or source.poster or '')}" alt="">
+        body = f"""<div class="panel"><div class="hero">{picture(source.image or source.poster, source.folder_name)}
 <div class="text"><h2 style="margin-top:0">{_e(source.folder_name)}</h2><div class="muted">{_e(source.plot[:600])}</div>
 <p class="muted">{_e(kind_label(source))} · {_e(mode_text(source))}</p>{feed}
 {"" if source.provider == "adhoc" else f'<a class="btn" href="{self._edit_link(source)}">Endre</a>'}

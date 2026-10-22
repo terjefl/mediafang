@@ -372,3 +372,18 @@ def test_api_fetch(db, cfg, monkeypatch):
         assert body == {"ok": True, "message": "Lastes ned: https://youtu.be/x lyd"}
     finally:
         server.shutdown()
+
+
+def test_scan_fills_missing_pictures(db, cfg, monkeypatch):
+    from mediafang.providers import Info
+    from mediafang.web import picture
+
+    s = channel(db)  # e.g. taken over from Pinchflat: no pictures
+    monkeypatch.setattr(youtube, "lookup", lambda kind, ref: Info("youtube", kind, ref, "Nora En Pure", "plot",
+                                                                  image="https://x/banner", poster="https://x/avatar"))
+    monkeypatch.setattr(youtube, "list_flat", lambda *a: [])
+    youtube.scan(db, s, cfg)
+    s = db.source(s.id)
+    assert (s.image, s.poster, s.plot) == ("https://x/banner", "https://x/avatar", "plot")
+    assert 'class="ph"' in picture(None, "Nora") and ">N<" in picture(None, "Nora")
+    assert "<img" in picture("https://x/banner", "Nora")

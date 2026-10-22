@@ -195,10 +195,12 @@ def ready_at(prf_id: str) -> datetime | None:
     now = datetime.now().astimezone()
     on_demand = avail.get("onDemand") or {}
     if on_demand.get("hasRightsNow"):
-        # Right after a broadcast NRK plays it back from the live stream ("nrk-live-...") until
-        # the recording is published; yt-dlp finds no formats in that
-        urls = [a.get("url", "") for a in (manifest.get("playable") or {}).get("assets") or []]
-        if urls and all("-live-" in u for u in urls):
+        # Right after a broadcast NRK plays it back from the live stream (hosts like
+        # nrk-live-world... or ...-liveedge1...) until the recording is published on its
+        # on-demand hosts (nrk-od-..., ...-odedge1...); yt-dlp finds no formats in the former
+        hosts = [urllib.parse.urlparse(a.get("url", "")).hostname or "" for a in
+                 (manifest.get("playable") or {}).get("assets") or []]
+        if hosts and all(any(part.startswith("live") for part in re.split(r"[.-]", h)) for h in hosts):
             return now + timedelta(minutes=30)
         return None
     start = _datetime(on_demand.get("from"))

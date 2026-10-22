@@ -283,11 +283,14 @@ def test_ready_at(monkeypatch):
 
 def test_ready_at_waits_for_the_recording(monkeypatch):
     live = "https://nrk-live-world.akamaized.net/nrk1-x/muxed.m3u8"
-    od = "https://nrk-od-world.akamaized.net/x/master.m3u8"
+    edge = "https://cdn0-47115-liveedge1.dna.contentdelivery.net/47115-liveedge1/nrk1-x"
+    od = "https://nrkod26-cdn0-47115-odedge1.dna.contentdelivery.net/x/master.m3u8"
     manifests = {
         "LIVECOPY": {"availability": {"onDemand": {"hasRightsNow": True}}, "playable": {"assets": [{"url": live}]}},
+        "EDGECOPY": {"availability": {"onDemand": {"hasRightsNow": True}}, "playable": {"assets": [{"url": edge}]}},
         "RECORDING": {"availability": {"onDemand": {"hasRightsNow": True}}, "playable": {"assets": [{"url": od}]}},
     }
     monkeypatch.setattr(psapi, "get", lambda path: manifests[path.rsplit("/", 1)[1]])
     assert psapi.ready_at("LIVECOPY") > datetime.now().astimezone()
+    assert psapi.ready_at("EDGECOPY") > datetime.now().astimezone()
     assert psapi.ready_at("RECORDING") is None

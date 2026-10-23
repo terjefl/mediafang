@@ -15,7 +15,7 @@ import urllib.parse
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import feeds, providers
+from . import favicon, feeds, providers
 from .config import Config
 from .db import DB, MAX_ATTEMPTS, Item, Source
 from .harvest import Progress
@@ -146,7 +146,7 @@ def _size(n: int) -> str:
 
 def page(title: str, body: str, query: str = "") -> bytes:
     doc = f"""<!doctype html><html lang="no"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>{_e(title)} · Mediafang</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{_e(title)} · Mediafang</title>{favicon.LINKS}
 <style>{CSS}</style></head><body>
 <header><h1><a href="/">Mediafang</a></h1>
 <form class="search" action="/sok"><input type="search" name="q" value="{_e(query)}"
